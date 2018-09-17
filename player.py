@@ -1,8 +1,8 @@
 import sys,os
-from player_layout import Ui_MainWindow
-from PyQt5.QtWidgets import QMainWindow, QApplication
-from PyQt5.QtGui import QImage,QPixmap,QPalette,QPainter,QPen
-from PyQt5.QtCore import pyqtSlot,QTimer,Qt
+from layout2 import Ui_MainWindow
+from PyQt5.QtWidgets import QMainWindow, QApplication,QListWidgetItem
+from PyQt5.QtGui import QImage,QPixmap,QPalette,QPainter,QPen,QIcon
+from PyQt5.QtCore import pyqtSlot,QTimer,Qt,QSize
 import numpy as np
 import cv2
 import requests
@@ -42,6 +42,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.cap = cv2.VideoCapture()
         self.file_opened = False
         self.frame = None
+        self.frame2 = None
         self.ret = False
         self.play.clicked.connect(self.on_click)
         self.pause.clicked.connect(self.pause_btn)
@@ -60,12 +61,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def _send2server(self,img):
         res = self.frame_sender.send(img)
         self.detection_res = res.get('yolo_res',[])
-        self.res_list.clear()        
+        self.res_list.clear()
+        self.res_list.setIconSize(QSize(200,200))      
+        #self.res_list.setSizeHint((50,50))  
         for detected_obj in self.detection_res:
             box = '{} {} {} {}'.format(detected_obj.get('top'),detected_obj.get('left')
                     ,detected_obj.get('bottom'),detected_obj.get('right'))
-            self.res_list.addItem('{}\n{}'.format(detected_obj.get('class'),box))
-            self._draw_rect(img,detected_obj)
+            #self.res_list.addItem('{}\n{}'.format(detected_obj.get('class'),box))
+            roi = self._draw_rect(img,detected_obj)
+            #qroi = self._convert_cv2Qtimg(roi)
+            pixmap = self._matToQImage(roi)
+            pix = QPixmap.fromImage(pixmap)            
+            item = QListWidgetItem()
+            #print(roi.shape)
+            item.setIcon(QIcon(pix))            
+            item.setSizeHint(QSize(roi.shape[1],roi.shape[0]))
+            
+            self.res_list.addItem(item)
+
+
+
 
     def _send_to_server(self):
         print('thread start')
@@ -112,6 +127,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.video_view.setPixmap(pix)
 
     def _draw_rect(self,img,det_res):
+        #img2 = img.copy()
         top = int(det_res.get('top'))
         left = int(det_res.get('left'))
         bottom = int(det_res.get('bottom'))
@@ -126,6 +142,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             top = top+20
         cv2.putText(img, label, (left,top), fontFace, 1.5, (0,0,255), 2)
 
+        #roi = im[y1:y2, x1:x2]
+        #return img2[top:bottom,left:right,:]
+        return self.frame2[top:bottom,left:right,:]
+
     def _draw_dots(self,img,dots):
         print(dots)
         for center in dots:
@@ -135,6 +155,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.ret, self.frame = self.cap.read()
         if self.ret == True:
+            self.frame2 = self.frame.copy()
             #frame = self.frame
             #self.imageQ.put(self.frame)
             self._send2server(self.frame)
